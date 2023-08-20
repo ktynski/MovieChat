@@ -9,7 +9,7 @@ model:
 
   frozen_llama_proj: False
 
-  llama_model: "ckpt/Vicuna7B/vicuna-7b-delta-v1.1"
+  llama_model: "ckpt/Vicuna/7B/"
   
   llama_proj_model: 'ckpt/pretrained_minigpt4.pth'
 
