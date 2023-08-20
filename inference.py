@@ -42,11 +42,12 @@ SHORT_MEMORY_Length = 10
 #%%
 def parse_args():
     parser = argparse.ArgumentParser(description="Demo")
+    parser.add_argument("--questions-file", required=True, help="path to file containing a list of questions")
     parser.add_argument("--cfg-path", required=True, help="path to configuration file.")
     parser.add_argument("--gpu-id", type=int, default=0, help="specify the gpu to load the model.")
     parser.add_argument("--num-beams", type=int, default=1)
     parser.add_argument("--temperature", type=float, default=1.0)
-    parser.add_argument("--text-query", required=True, help="question the video")
+    #parser.add_argument("--text-query", required=True, help="question the video")
     parser.add_argument("--video-path", required=True, help="path to video file.")
     parser.add_argument("--fragment-video-path", required=True, help="path to video fragment file.")
     parser.add_argument("--cur-sec", type=int, default=2, help="current minute")
@@ -139,7 +140,7 @@ def parse_video_fragment(video_path, video_length, n_stage = 0, n_samples = N_SA
     decord.bridge.set_bridge("torch")
     per_video_length = video_length / n_samples
     # cut video from per_video_length(n_stage-1, n_stage)
-    fragment_video_path = "src/video_fragment/output.mp4"
+    fragment_video_path = "/content/MovieChat/src/video_fragment/output.mp4"
     capture_video(video_path, fragment_video_path, per_video_length, n_stage)
     return fragment_video_path
 
@@ -279,7 +280,7 @@ class Chat:
         return msg  
     def gener_infer(self, video_path, text_input, num_beams, temperature, libraries, minute, second):
         print("here")
-        fragment_video_path = "src/video_fragment/output.mp4"
+        fragment_video_path = "/content/MovieChat/src/video_fragment/output.mp4"
         cur_min = minute if minute is not None else int(0)
         cur_sec = second if second is not None else int(0)
 
@@ -298,7 +299,7 @@ class Chat:
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, cur_fps)
             ret, frame = cap.read()
-            temp_frame_path = 'src/output_frame/snapshot.jpg'
+            temp_frame_path = '/content/MovieChat/src/output_frame/snapshot.jpg'
 
             cv2.imwrite(temp_frame_path, frame) 
             raw_image = Image.open(temp_frame_path).convert('RGB') 
@@ -316,13 +317,16 @@ class Chat:
                 middle_video = self.model.middle_video,
                 )
             
-            llm_message = self.answer(img_list=img_list,
-                                    input_text=text_input,
-                                    msg = msg,
-                                    num_beams=num_beams,
-                                    temperature=temperature,
-                                    max_new_tokens=300,
-                                    max_length=2000)[0]
+            answers = {}
+            for text_input in questions:
+                llm_message = chat.answer(img_list=img_list,
+                                          input_text=text_input,
+                                          msg=msg,
+                                          num_beams=args.num_beams,
+                                          temperature=args.temperature,
+                                          max_new_tokens=300,
+                                          max_length=2000)[0]
+            answers[text_input] = llm_message
 
             self.output_text = llm_message
             print(self.output_text)
@@ -333,6 +337,9 @@ if __name__ =='__main__':
     print('Initializing Chat')
     args = parse_args()
     cfg = Config(args)
+
+    with open(args.questions_file, 'r') as file:
+      questions = [line.strip() for line in file.readlines()]
 
     model_config = cfg.model_cfg
     model_config.device_8bit = args.gpu_id
@@ -357,8 +364,12 @@ if __name__ =='__main__':
     cap = cv2.VideoCapture(video_path)
     cap.set(cv2.CAP_PROP_POS_FRAMES, cur_fps)
     ret, frame = cap.read()
-    temp_frame_path = 'src/output_frame/snapshot.jpg'
-
+    print(f"Ret:{ret}")
+    print(f"Frame:{frame}")
+    print("Frame shape:", frame.shape)
+    print("Frame data type:", frame.dtype)
+    temp_frame_path = '/content/MovieChat/src/output_frame/snapshot.jpg'
+    print(f"Temp_frame_path:{temp_frame_path}")
     cv2.imwrite(temp_frame_path, frame) 
     raw_image = Image.open(temp_frame_path).convert('RGB') 
     image = chat.image_vis_processor(raw_image).unsqueeze(0).unsqueeze(2).to(chat.device) # [1,3,1,224,224]
