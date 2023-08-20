@@ -8,6 +8,7 @@ import random
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+import pandas as pd
 
 from MovieChat.common.config import Config
 from MovieChat.common.dist_utils import get_rank
@@ -317,29 +318,27 @@ class Chat:
                 middle_video = self.model.middle_video,
                 )
             
-            answers = {}
-            for text_input in questions:
-                llm_message = chat.answer(img_list=img_list,
-                                          input_text=text_input,
-                                          msg=msg,
-                                          num_beams=args.num_beams,
-                                          temperature=args.temperature,
-                                          max_new_tokens=300,
-                                          max_length=2000)[0]
-            answers[text_input] = llm_message
+            llm_message = self.answer(img_list=img_list,
+                                    input_text=text_input,
+                                    msg = msg,
+                                    num_beams=num_beams,
+                                    temperature=temperature,
+                                    max_new_tokens=300,
+                                    max_length=2000)[0]
 
             self.output_text = llm_message
             print(self.output_text)
 
-if __name__ =='__main__':
+if __name__ == '__main__':
     config_seed = 42
     setup_seeds(config_seed)
     print('Initializing Chat')
     args = parse_args()
     cfg = Config(args)
 
+    # Load the questions from the file
     with open(args.questions_file, 'r') as file:
-      questions = [line.strip() for line in file.readlines()]
+        questions = [line.strip() for line in file.readlines()]
 
     model_config = cfg.model_cfg
     model_config.device_8bit = args.gpu_id
@@ -359,20 +358,15 @@ if __name__ =='__main__':
 
     cap = cv2.VideoCapture(video_path)
     fps_video = cap.get(cv2.CAP_PROP_FPS)
-    cur_fps = fps_video * (60*cur_min + cur_sec)
+    cur_fps = fps_video * (60 * cur_min + cur_sec)
 
     cap = cv2.VideoCapture(video_path)
     cap.set(cv2.CAP_PROP_POS_FRAMES, cur_fps)
     ret, frame = cap.read()
-    print(f"Ret:{ret}")
-    print(f"Frame:{frame}")
-    print("Frame shape:", frame.shape)
-    print("Frame data type:", frame.dtype)
     temp_frame_path = '/content/MovieChat/src/output_frame/snapshot.jpg'
-    print(f"Temp_frame_path:{temp_frame_path}")
-    cv2.imwrite(temp_frame_path, frame) 
-    raw_image = Image.open(temp_frame_path).convert('RGB') 
-    image = chat.image_vis_processor(raw_image).unsqueeze(0).unsqueeze(2).to(chat.device) # [1,3,1,224,224]
+    cv2.imwrite(temp_frame_path, frame)
+    raw_image = Image.open(temp_frame_path).convert('RGB')
+    image = chat.image_vis_processor(raw_image).unsqueeze(0).unsqueeze(2).to(chat.device)  # [1,3,1,224,224]
     cur_image = chat.model.encode_image(image)
 
     if middle_video == 1:
@@ -383,26 +377,30 @@ if __name__ =='__main__':
     img_list = []
     middle_video = True
     msg = chat.upload_video_without_audio(
-        video_path=video_path, 
+        video_path=video_path,
         fragment_video_path=fragment_video_path,
-        cur_min=cur_min, 
-        cur_sec=cur_sec, 
-        cur_image = cur_image, 
-        img_list=img_list, 
-        middle_video = middle_video,
-        )
-    
-    text_input = args.text_query
+        cur_min=cur_min,
+        cur_sec=cur_sec,
+        cur_image=cur_image,
+        img_list=img_list,
+        middle_video=middle_video,
+    )
 
-    num_beams = args.num_beams
-    temperature = args.temperature
-    llm_message = chat.answer(img_list=img_list,
-                              input_text=text_input,
-                              msg = msg,
-                              num_beams=num_beams,
-                              temperature=temperature,
-                              max_new_tokens=300,
-                              max_length=2000)[0]
+    # Iterate over the questions and collect the answers
+    answers = {}
+    for text_input in questions:
+        llm_message = chat.answer(img_list=img_list,
+                                  input_text=text_input,
+                                  msg=msg,
+                                  num_beams=args.num_beams,
+                                  temperature=args.temperature,
+                                  max_new_tokens=300,
+                                  max_length=2000)[0]
+        answers[text_input] = llm_message
 
-    print(llm_message)
+    # Print or write the answers to a JSON file
+    import json
+    with open('/content/answers.json', 'w') as file:
+        json.dump(answers, file)
+
     
